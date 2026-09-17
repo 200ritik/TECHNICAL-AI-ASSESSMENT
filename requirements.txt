@@ -1,0 +1,8 @@
+pandas
+numpy
+groq
+python-dotenv
+fastapi
+uvicorn
+streamlit
+requests
