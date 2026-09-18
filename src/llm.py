@@ -12,10 +12,6 @@ class TicketLLM:
 
     def __init__(self):
 
-        # ------------------------------------------
-        # Get API key
-        # ------------------------------------------
-
         api_key = os.getenv("GROQ_API_KEY")
 
         if not api_key:
@@ -23,23 +19,11 @@ class TicketLLM:
                 "GROQ_API_KEY not found in .env file."
             )
 
-        # ------------------------------------------
-        # Initialize Groq client
-        # ------------------------------------------
-
         self.client = Groq(
             api_key=api_key
         )
 
-        # ------------------------------------------
-        # Model
-        # ------------------------------------------
-
         self.model = "openai/gpt-oss-20b"
-
-    # --------------------------------------------------
-    # Understand natural language query
-    # --------------------------------------------------
 
     def understand_query(self, question):
 
@@ -59,215 +43,270 @@ DO NOT invent information.
 The Python query engine will execute the
 structured query against the actual dataset.
 
---------------------------------------------------
+
 AVAILABLE OPERATIONS
---------------------------------------------------
+--------------------
 
 1. count_tickets
+2. get_tickets
+3. average_rating
+4. average_rating_by_group
+5. group_and_rank
+6. resolution_rate
+7. detect_resolution_anomalies
+8. unresolved_high_priority_tickets
+9. unsupported
 
-Use this when the user asks how many tickets
-match one or more basic filters.
+
+count_tickets
+-------------
+
+Use ONLY when the user asks for a count based on:
+
+- status
+- priority
+- category
+
+AND there is NO resolution-time condition.
 
 Examples:
 
-"How many tickets are open?"
+"How many tickets are currently open?"
 
-"How many critical tickets are there?"
+→ count_tickets
+→ status = Open
 
-"How many Technical tickets are open?"
 
---------------------------------------------------
+"How many Critical tickets are there?"
 
-2. get_tickets
+→ count_tickets
+→ priority = Critical
 
-Use this when the user asks to find, list, show,
-or count tickets based on priority and/or
-resolution time.
+
+"How many Technical tickets are there?"
+
+→ count_tickets
+→ category = Technical
+
 
 IMPORTANT:
 
-Use get_tickets when the question contains:
+If the question contains ANY resolution-time
+condition, DO NOT use count_tickets.
+
+Resolution-time conditions include:
+
+- unresolved
+- not resolved
+- resolved within X hours
+- took more than X hours
+- older than X hours
+- longer than X hours
+- resolution time
+- unresolved OR took more than X hours
+
+
+get_tickets
+-----------
+
+Use when the question asks to show, list, find,
+OR COUNT tickets involving a resolution-time
+condition.
+
+This includes:
 
 - unresolved tickets
-- resolution time
+- tickets not resolved within X hours
 - tickets taking more than X hours
-- tickets taking longer than X hours
-- tickets that were not resolved within X hours
-- priority + resolution-time conditions
+- tickets with resolution time greater than X
+- tickets that are unresolved OR took more than X hours
+
 
 An unresolved ticket means:
 
 resolution_time_hrs is null.
 
-When max_resolution_time_hrs is provided, the
-Python query engine will return:
 
-- unresolved tickets
-OR
-- tickets whose resolution_time_hrs is greater
-  than the specified threshold.
+IMPORTANT EXAMPLES:
 
-Examples:
-
-User:
 "How many critical tickets are unresolved?"
 
-Output:
-{
-  "operation": "get_tickets",
-  "status": "",
-  "priority": "Critical",
-  "category": "",
-  "group_by": "",
-  "month": 0,
-  "max_resolution_time_hrs": "0"
-}
+→ get_tickets
+→ priority = Critical
+→ max_resolution_time_hrs = "0"
 
-User:
-"How many critical tickets took more than 12 hours to resolve?"
 
-Output:
-{
-  "operation": "get_tickets",
-  "status": "",
-  "priority": "Critical",
-  "category": "",
-  "group_by": "",
-  "month": 0,
-  "max_resolution_time_hrs": "12"
-}
+"How many critical tickets took more than 12 hours
+to resolve?"
 
-User:
-"How many critical tickets are unresolved or took more than 12 hours to resolve?"
+→ get_tickets
+→ priority = Critical
+→ max_resolution_time_hrs = "12"
 
-Output:
-{
-  "operation": "get_tickets",
-  "status": "",
-  "priority": "Critical",
-  "category": "",
-  "group_by": "",
-  "month": 0,
-  "max_resolution_time_hrs": "12"
-}
 
-User:
-"Show critical tickets that took more than 24 hours."
+"How many critical tickets are unresolved or took
+more than 12 hours to resolve?"
 
-Output:
-{
-  "operation": "get_tickets",
-  "status": "",
-  "priority": "Critical",
-  "category": "",
-  "group_by": "",
-  "month": 0,
-  "max_resolution_time_hrs": "24"
-}
+→ get_tickets
+→ priority = Critical
+→ max_resolution_time_hrs = "12"
 
---------------------------------------------------
-3. average_rating
---------------------------------------------------
 
-Use this when the user asks for the average
-customer rating.
+"Show me all Critical tickets not resolved
+within 12 hours."
+
+→ get_tickets
+→ priority = Critical
+→ max_resolution_time_hrs = "12"
+
+
+"Show Critical tickets that took more than
+24 hours."
+
+→ get_tickets
+→ priority = Critical
+→ max_resolution_time_hrs = "24"
+
+
+average_rating
+--------------
+
+Use for overall or category-specific
+average customer rating.
+
+Example:
+
+"What is the average customer rating for
+Technical tickets?"
+
+→ average_rating
+→ category = Technical
+
+
+average_rating_by_group
+-----------------------
+
+Use when the user asks for average customer
+ratings grouped by agent, category, priority,
+or status.
+
+Example:
+
+"Which agent has the lowest average
+customer rating?"
+
+→ average_rating_by_group
+→ group_by = agent_id
+
+
+"Which category has the highest average
+customer rating?"
+
+→ average_rating_by_group
+→ group_by = category
+
+
+group_and_rank
+--------------
+
+Use when the user asks to rank or count
+tickets by a group.
 
 Examples:
 
-"What is the average customer rating?"
+"Which agent resolved the most tickets?"
 
-"What is the average rating for Technical tickets?"
+→ group_and_rank
+→ group_by = agent_id
+→ status = Resolved
 
-"What is the average rating for Billing tickets?"
 
---------------------------------------------------
-4. group_and_rank
---------------------------------------------------
+"Which agent resolved the most tickets in March?"
 
-Use this when the user asks to group, rank,
-compare, or order tickets by an attribute.
+→ group_and_rank
+→ group_by = agent_id
+→ status = Resolved
+→ month = 3
 
-Possible group_by values:
-
-- agent_id
-- category
-- priority
-- status
-
-Examples:
-
-"Rank agents by resolved tickets."
-
-"Which agents handled the most tickets?"
 
 "Rank agents by resolved tickets in March."
 
-If the question says March, use:
+→ group_and_rank
+→ group_by = agent_id
+→ status = Resolved
+→ month = 3
 
-"month": 3
 
-If the question says January, use:
+resolution_rate
+---------------
 
-"month": 1
+Use for resolution rate questions.
 
-February = 2
-March = 3
-April = 4
-May = 5
-June = 6
-July = 7
-August = 8
-September = 9
-October = 10
-November = 11
-December = 12
-
-The dataset is from 2024, so month filtering
-must use the year 2024.
-
---------------------------------------------------
-5. resolution_rate
---------------------------------------------------
-
-Use this when the user asks for resolution rate.
-
-Examples:
+Example:
 
 "What is the resolution rate by category?"
 
-"Show resolution rate for each category."
+→ resolution_rate
+→ group_by = category
 
-"Which category has the highest resolution rate?"
 
-If grouping by category:
+detect_resolution_anomalies
+---------------------------
 
-"group_by": "category"
-
---------------------------------------------------
-6. detect_resolution_anomalies
---------------------------------------------------
-
-Use this when the user asks to find abnormal,
-unusual, or anomalous resolution times.
+Use for abnormal or unusual resolution-time
+questions.
 
 Examples:
 
 "Find abnormal resolution times."
 
-"Detect resolution time anomalies."
+"Are there any anomalies in resolution times?"
 
-"Which tickets have unusual resolution times?"
+"Are there any anomalies in resolution times
+this week?"
 
---------------------------------------------------
-7. unsupported
---------------------------------------------------
+For "this week":
 
-Use this when the question cannot be answered
-using the available operations and dataset.
+→ operation = detect_resolution_anomalies
+→ time_period = this_week
 
---------------------------------------------------
-AVAILABLE DATASET COLUMNS
---------------------------------------------------
+The Python application calculates the actual
+date range from the dataset.
+
+
+unresolved_high_priority_tickets
+--------------------------------
+
+Use for unresolved High or Critical tickets
+older than a specified number of hours.
+
+High-priority means:
+
+High OR Critical.
+
+Example:
+
+"Find unresolved high-priority tickets older
+than 24 hours."
+
+→ unresolved_high_priority_tickets
+→ max_resolution_time_hrs = "24"
+
+
+"Find unresolved Critical tickets older than
+24 hours."
+
+→ unresolved_high_priority_tickets
+→ priority = Critical
+→ max_resolution_time_hrs = "24"
+
+
+DATASET
+-------
+
+The dataset contains data from 2024.
+
+Columns:
 
 ticket_id
 created_at
@@ -280,104 +319,121 @@ agent_id
 customer_rating
 issue_summary
 
---------------------------------------------------
-ALLOWED VALUES
---------------------------------------------------
 
-Status:
+ALLOWED STATUS
+--------------
 
 Open
 Resolved
 Escalated
 
-Priority:
+
+ALLOWED PRIORITY
+----------------
 
 Low
 Medium
 High
 Critical
 
-Category:
+
+ALLOWED CATEGORY
+----------------
 
 Billing
 Technical
 General
 
-Group by:
+
+ALLOWED GROUP BY
+----------------
 
 agent_id
 category
 priority
 status
 
---------------------------------------------------
-OUTPUT RULES
---------------------------------------------------
 
-You MUST return JSON matching the provided schema.
+MONTH
+-----
 
-For unused string fields use:
+Use numbers 1-12.
+
+January = 1
+February = 2
+March = 3
+April = 4
+May = 5
+June = 6
+July = 7
+August = 8
+September = 9
+October = 10
+November = 11
+December = 12
+
+
+TIME PERIOD
+-----------
+
+Allowed values:
 
 ""
+"this_week"
 
-For an unused month use:
+Use "this_week" only when the user explicitly
+asks for "this week".
 
-0
+The Python application calculates the date
+range from the dataset.
 
-For an unused resolution threshold use:
+Do not calculate dates yourself.
 
-"0"
 
-max_resolution_time_hrs MUST always be a STRING.
+FINAL OPERATION RULE
+--------------------
 
-For example:
+If max_resolution_time_hrs is greater than "0",
+the operation MUST be either:
 
-"12"
+get_tickets
 
-NOT:
+OR
 
-12
+unresolved_high_priority_tickets
 
---------------------------------------------------
-IMPORTANT
---------------------------------------------------
+NEVER use count_tickets when a resolution-time
+condition exists.
 
-Do not answer the question.
+If the question contains "unresolved" together
+with a count request, use get_tickets.
 
-Only return the structured JSON.
+If the question contains "took more than X hours"
+or "not resolved within X hours", use get_tickets.
+
+
+OUTPUT RULES
+------------
+
+Return ONLY valid JSON.
 
 Do not include explanations.
 
-Do not include markdown.
+Do not answer the question.
 
---------------------------------------------------
-FINAL EXAMPLE
---------------------------------------------------
+For unused string fields use "".
 
-User:
-"How many tickets are currently open?"
+For unused month use 0.
 
-Return:
+For unused time_period use "".
 
-{
-  "operation": "count_tickets",
-  "status": "Open",
-  "priority": "",
-  "category": "",
-  "group_by": "",
-  "month": 0,
-  "max_resolution_time_hrs": "0"
-}
+max_resolution_time_hrs MUST always be a STRING.
+
+For unused threshold use "0".
 """
 
-        # ------------------------------------------
-        # JSON schema
-        # ------------------------------------------
-
         response_schema = {
-
             "type": "object",
-
             "properties": {
 
                 "operation": {
@@ -386,9 +442,11 @@ Return:
                         "count_tickets",
                         "get_tickets",
                         "average_rating",
+                        "average_rating_by_group",
                         "group_and_rank",
                         "resolution_rate",
                         "detect_resolution_anomalies",
+                        "unresolved_high_priority_tickets",
                         "unsupported"
                     ]
                 },
@@ -415,6 +473,14 @@ Return:
 
                 "max_resolution_time_hrs": {
                     "type": "string"
+                },
+
+                "time_period": {
+                    "type": "string",
+                    "enum": [
+                        "",
+                        "this_week"
+                    ]
                 }
             },
 
@@ -425,18 +491,14 @@ Return:
                 "category",
                 "group_by",
                 "month",
-                "max_resolution_time_hrs"
+                "max_resolution_time_hrs",
+                "time_period"
             ],
 
             "additionalProperties": False
         }
 
-        # ------------------------------------------
-        # Call Groq
-        # ------------------------------------------
-
         response = self.client.chat.completions.create(
-
             model=self.model,
 
             messages=[
@@ -452,6 +514,7 @@ Return:
 
             response_format={
                 "type": "json_schema",
+
                 "json_schema": {
                     "name": "ticket_query",
                     "strict": True,
@@ -462,15 +525,7 @@ Return:
             temperature=0
         )
 
-        # ------------------------------------------
-        # Extract response
-        # ------------------------------------------
-
         content = response.choices[0].message.content
-
-        # ------------------------------------------
-        # Convert JSON string to Python dictionary
-        # ------------------------------------------
 
         result = json.loads(content)
 

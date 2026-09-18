@@ -1,7 +1,10 @@
 import pandas as pd
+from pathlib import Path
 
 
-ticket_file = "https://raw.githubusercontent.com/200ritik/TECHNICAL-AI-ASSESSMENT/6202be2324ecfd73a1d2d529bc54ee15fd2bf190/data/support_tickets.csv"
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+ticket_file = BASE_DIR / "data" / "support_tickets.csv"
 
 
 def dataset_ingestion():

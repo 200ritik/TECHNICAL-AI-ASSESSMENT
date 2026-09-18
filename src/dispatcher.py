@@ -10,17 +10,16 @@ class TicketDispatcher:
 
     def __init__(self):
 
-        # Load dataset through ingestion layer
         self.df = dataset_ingestion()
 
-        # Initialize query engine
-        self.engine = TicketQueryEngine(self.df)
+        self.engine = TicketQueryEngine(
+            self.df
+        )
 
-        # Initialize LLM
         self.llm = TicketLLM()
 
     # --------------------------------------------------
-    # Validate LLM generated query
+    # Query validation
     # --------------------------------------------------
 
     def validate_query(self, query):
@@ -29,9 +28,11 @@ class TicketDispatcher:
             "count_tickets",
             "get_tickets",
             "average_rating",
+            "average_rating_by_group",
             "group_and_rank",
             "resolution_rate",
             "detect_resolution_anomalies",
+            "unresolved_high_priority_tickets",
             "unsupported"
         }
 
@@ -61,9 +62,10 @@ class TicketDispatcher:
             "status"
         }
 
-        # --------------------------------------------------
-        # Operation
-        # --------------------------------------------------
+        allowed_time_periods = {
+            "",
+            "this_week"
+        }
 
         operation = query.get("operation")
 
@@ -72,20 +74,12 @@ class TicketDispatcher:
                 f"Unsupported operation: {operation}"
             )
 
-        # --------------------------------------------------
-        # Status
-        # --------------------------------------------------
-
         status = query.get("status", "")
 
         if status and status not in allowed_statuses:
             raise ValueError(
                 f"Invalid status: {status}"
             )
-
-        # --------------------------------------------------
-        # Priority
-        # --------------------------------------------------
 
         priority = query.get("priority", "")
 
@@ -94,10 +88,6 @@ class TicketDispatcher:
                 f"Invalid priority: {priority}"
             )
 
-        # --------------------------------------------------
-        # Category
-        # --------------------------------------------------
-
         category = query.get("category", "")
 
         if category and category not in allowed_categories:
@@ -105,20 +95,12 @@ class TicketDispatcher:
                 f"Invalid category: {category}"
             )
 
-        # --------------------------------------------------
-        # Group by
-        # --------------------------------------------------
-
         group_by = query.get("group_by", "")
 
         if group_by and group_by not in allowed_group_by:
             raise ValueError(
                 f"Invalid group_by: {group_by}"
             )
-
-        # --------------------------------------------------
-        # Month
-        # --------------------------------------------------
 
         month = query.get("month", 0)
 
@@ -131,10 +113,6 @@ class TicketDispatcher:
             raise ValueError(
                 "Month must be between 0 and 12."
             )
-
-        # --------------------------------------------------
-        # Resolution time
-        # --------------------------------------------------
 
         resolution_time = query.get(
             "max_resolution_time_hrs",
@@ -158,18 +136,29 @@ class TicketDispatcher:
                 "Resolution time cannot be negative."
             )
 
-        # Save converted value
-        query["max_resolution_time_hrs"] = resolution_time
+        time_period = query.get(
+            "time_period",
+            ""
+        )
+
+        if time_period not in allowed_time_periods:
+
+            raise ValueError(
+                f"Invalid time period: {time_period}"
+            )
+
+        query["max_resolution_time_hrs"] = (
+            resolution_time
+        )
 
         return query
 
     # --------------------------------------------------
-    # Format result
+    # Result formatting
     # --------------------------------------------------
 
     def format_result(self, result):
 
-        # DataFrame
         if isinstance(result, pd.DataFrame):
 
             records = result.to_dict(
@@ -210,7 +199,6 @@ class TicketDispatcher:
 
             return formatted_records
 
-        # Series
         if isinstance(result, pd.Series):
 
             formatted_result = {}
@@ -232,12 +220,10 @@ class TicketDispatcher:
 
             return formatted_result
 
-        # NumPy value
         if isinstance(result, np.generic):
 
             return result.item()
 
-        # Normal value
         return result
 
     # --------------------------------------------------
@@ -248,24 +234,13 @@ class TicketDispatcher:
 
         operation = query["operation"]
 
-        # --------------------------------------------------
-        # Count tickets
-        # --------------------------------------------------
-
         if operation == "count_tickets":
 
             result = self.engine.count_tickets(
-
                 status=query.get("status") or None,
-
                 priority=query.get("priority") or None,
-
                 category=query.get("category") or None
             )
-
-        # --------------------------------------------------
-        # Get tickets
-        # --------------------------------------------------
 
         elif operation == "get_tickets":
 
@@ -279,72 +254,107 @@ class TicketDispatcher:
                 resolution_time = None
 
             result = self.engine.get_tickets(
-
-                priority=query.get(
-                    "priority"
-                ) or None,
-
+                priority=query.get("priority") or None,
                 max_resolution_time_hrs=resolution_time
             )
-
-        # --------------------------------------------------
-        # Average rating
-        # --------------------------------------------------
 
         elif operation == "average_rating":
 
             result = self.engine.average_rating(
-
-                category=query.get(
-                    "category"
-                ) or None
+                category=query.get("category") or None
             )
 
-        # --------------------------------------------------
-        # Group and rank
-        # --------------------------------------------------
+        elif operation == "average_rating_by_group":
+
+            result = (
+                self.engine
+                .average_rating_by_group(
+                    group_by=query.get("group_by")
+                    or "agent_id"
+                )
+            )
 
         elif operation == "group_and_rank":
 
             result = self.engine.group_and_rank(
+                group_by=query.get("group_by")
+                or "agent_id",
 
-                group_by=query.get(
-                    "group_by"
-                ) or "agent_id",
+                status=query.get("status")
+                or None,
 
-                status=query.get(
-                    "status"
-                ) or None,
-
-                month=query.get(
-                    "month"
-                ) or None
+                month=query.get("month")
+                or None
             )
-
-        # --------------------------------------------------
-        # Resolution rate
-        # --------------------------------------------------
 
         elif operation == "resolution_rate":
 
             result = self.engine.resolution_rate(
-
-                group_by=query.get(
-                    "group_by"
-                ) or "category"
+                group_by=query.get("group_by")
+                or "category"
             )
-
-        # --------------------------------------------------
-        # Resolution anomalies
-        # --------------------------------------------------
 
         elif operation == "detect_resolution_anomalies":
 
-            result = self.engine.detect_resolution_anomalies()
+            time_period = query.get(
+                "time_period",
+                ""
+            )
 
-        # --------------------------------------------------
-        # Unsupported
-        # --------------------------------------------------
+            if time_period == "this_week":
+
+                latest_date = self.df[
+                    "created_at"
+                ].max()
+
+                start_date = (
+                    latest_date
+                    - pd.Timedelta(
+                        days=latest_date.weekday()
+                    )
+                ).normalize()
+
+                end_date = (
+                    start_date
+                    + pd.Timedelta(days=6)
+                    + pd.Timedelta(
+                        hours=23,
+                        minutes=59,
+                        seconds=59
+                    )
+                )
+
+                result = (
+                    self.engine
+                    .detect_resolution_anomalies(
+                        start_date=start_date,
+                        end_date=end_date
+                    )
+                )
+
+            else:
+
+                result = (
+                    self.engine
+                    .detect_resolution_anomalies()
+                )
+
+        elif operation == "unresolved_high_priority_tickets":
+
+            hours = query.get(
+                "max_resolution_time_hrs",
+                24
+            )
+
+            if hours == 0:
+                hours = 24
+
+            result = (
+                self.engine
+                .unresolved_high_priority_tickets(
+                    hours=hours
+                )
+            )
 
         elif operation == "unsupported":
 
@@ -364,27 +374,23 @@ class TicketDispatcher:
         return self.format_result(result)
 
     # --------------------------------------------------
-    # Ask question
+    # Ask
     # --------------------------------------------------
 
     def ask(self, question):
 
-        # 1. LLM understands the question
         query = self.llm.understand_query(
             question
         )
 
-        # 2. Validate structured query
         query = self.validate_query(
             query
         )
 
-        # 3. Execute query
         result = self.execute_query(
             query
         )
 
-        # 4. Return query + result
         return {
             "query": query,
             "result": result
